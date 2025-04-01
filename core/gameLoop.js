@@ -20,21 +20,27 @@ const npcBirds = [
 export function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // 🚨 Visual alert if any bird escapes
+  for (const npc of npcBirds) {
+    if (npc.y > canvas.height + 10) {
+      ctx.fillStyle = "rgba(255, 0, 0, 0.2)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      break;
+    }
+  }
+
   drawMap();
 
-  // Food logic
   updateResources(player);
   drawResources();
 
-  // NPC birds
   for (const npc of npcBirds) {
-    updateResources(npc); // They can eat too!
+    updateResources(npc);
     const target = getNearestResource(npc.x, npc.y);
     npc.update(target);
     npc.draw(ctx);
   }
 
-  // Player
   player.update();
   player.draw(ctx);
 

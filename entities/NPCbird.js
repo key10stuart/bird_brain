@@ -1,69 +1,116 @@
-// entities/NPCBird.js
-
 import { settings } from "../core/settings.js";
 import { canvas } from "../core/input.js";
+import { drawFlyingBird, drawLandedBird } from "../draw/drawBird.js";
+import { getNearestResource } from "../entities/Resources.js";
+import { forward, createRandomNN } from "../agents/brains.js";
 
 export class NPCBird {
   constructor(x, y) {
     this.x = x;
     this.y = y;
-    this.alt = 0;
     this.vx = 0;
     this.vy = 0;
-    this.radius = 10;
-    this.flapAnim = 0;
-    this.energy = 0;
 
+    this.altitude = 0.5;
+    this.flapAnim = 0;
+    this.spriteMode = "FLY";
+    this.state = "LANDED";
+
+    this.radius = 10;
+    this.bodyHeight = 7;
+
+    this.energy = 0;
     this.brain = createRandomNN();
   }
 
-  think(input) {
-    const out = forward(this.brain, input);
-    return {
-      dx: out[0] * 2 - 1,
-      dy: out[1] * 2 - 1,
-      flap: out[2] > 0.5
-    };
+  think() {
+    const resource = getNearestResource(this.x, this.y);
+    const rx = resource ? resource.x / canvas.width : 0.5;
+    const ry = resource ? resource.y / canvas.height : 0.5;
+
+    const input = [
+      this.x / canvas.width,
+      this.y / canvas.height,
+      1, // bias
+      rx,
+      ry
+    ];
+
+    const output = forward(this.brain, input);
+
+    const dx = (output[0] - 0.5) * 2;
+    const dy = (output[1] - 0.5) * 2;
+    const flap = output[2] > 0.9;
+
+    return { dx, dy, flap };
   }
 
-  update(target = null) {
-    let input;
+  update() {
+    const decision = this.think();
+    const margin = 10;
+    const spriteHalfHeight = this.bodyHeight + 5;
 
-    if (target) {
-      const dx = (target.x - this.x) / canvas.width;
-      const dy = (target.y - this.y) / canvas.height;
-      input = [dx, dy, 1];
-    } else {
-      input = [Math.random(), Math.random(), 0];
+    if (this.state === "LANDED") {
+      this.altitude = 0.5;
+
+      if (Math.abs(decision.dx) > 0.1 || Math.abs(decision.dy) > 0.1) {
+        this.vx = decision.dx * settings.followSpeed;
+        this.vy = decision.dy * settings.followSpeed;
+      } else {
+        this.vx = 0;
+        this.vy = 0;
+      }
+
+      if (decision.flap) {
+        this.altitude += settings.flapStrengthGround;
+        if (this.altitude > 2.5) this.altitude = 2.5;
+        this.state = "FLYING";
+        this.flapAnim = 1.0;
+      }
+    } else if (this.state === "FLYING") {
+      if (decision.flap) {
+        this.altitude += settings.flapStrengthAir;
+        if (this.altitude > 2.5) this.altitude = 2.5;
+        this.flapAnim = 1.0;
+      } else {
+        this.altitude -= settings.gravity;
+      }
+
+      this.vx += decision.dx * 0.05;
+      this.vy += decision.dy * 0.05;
+
+      if (this.altitude <= 0.5) {
+        this.altitude = 0.5;
+        this.state = "LANDED";
+      }
     }
-
-    const decision = this.think(input);
-
-    this.vx += decision.dx * 0.05;
-    this.vy += decision.dy * 0.05;
-
-    if (decision.flap && this.alt <= 0) {
-      this.vy -= settings.flapStrengthGround;
-      this.flapAnim = 1;
-    }
-
-    this.vy += settings.gravity;
 
     this.x += this.vx;
     this.y += this.vy;
 
-    // Clamp to canvas boundaries
-    this.x = Math.max(0, Math.min(this.x, canvas.width));
-    this.y = Math.max(0, Math.min(this.y, canvas.height));
+    // Clamp position
+    if (this.x < margin) {
+      this.x = margin;
+      this.vx *= -0.5;
+    } else if (this.x > canvas.width - margin) {
+      this.x = canvas.width - margin;
+      this.vx *= -0.5;
+    }
 
-    // Bounce inward on edge
-    if (this.x <= 0 || this.x >= canvas.width) this.vx *= -0.5;
-    if (this.y <= 0 || this.y >= canvas.height) this.vy *= -0.5;
+    const yBottomLimit = canvas.height - margin - spriteHalfHeight;
+    const yTopLimit = margin + spriteHalfHeight;
 
-    this.alt = Math.max(0, this.alt + this.vy);
+    if (this.y > yBottomLimit) {
+      this.y = yBottomLimit;
+      this.vy = 0;
+    } else if (this.y < yTopLimit) {
+      this.y = yTopLimit;
+      this.vy = 0;
+    }
+
+    this.altitude = Math.max(0.5, Math.min(this.altitude, 2.5));
+    this.spriteMode = "FLY";
     this.flapAnim *= 0.9;
-
-    // Dampen velocity
     this.vx *= 0.95;
     this.vy *= 0.95;
   }
@@ -71,66 +118,11 @@ export class NPCBird {
   draw(ctx) {
     ctx.save();
     ctx.translate(this.x, this.y);
-    ctx.scale(1, 1 - this.alt * 0.001);
-
-    // Body
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 10, 7, 0, 0, 2 * Math.PI);
-    ctx.fillStyle = 'blue';
-    ctx.fill();
-
-    // Wings
-    const fold = this.flapAnim;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(-20 * fold, -10);
-    ctx.lineTo(-20 * fold, 10);
-    ctx.fillStyle = 'blue';
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(20 * fold, -10);
-    ctx.lineTo(20 * fold, 10);
-    ctx.fill();
-
+    if (this.state === "LANDED") {
+      drawLandedBird(ctx);
+    } else {
+      drawFlyingBird(ctx, this);
+    }
     ctx.restore();
   }
-}
-
-// 🧠 Tiny 3-input, 4-hidden, 3-output neural net
-
-function createRandomNN() {
-  return {
-    w1: [randWeights(3), randWeights(3), randWeights(3), randWeights(3)],
-    b1: [0, 0, 0, 0],
-    w2: [randWeights(4), randWeights(4), randWeights(4)],
-    b2: [0, 0, 0]
-  };
-}
-
-function randWeights(n) {
-  return Array.from({ length: n }, () => Math.random() * 2 - 1);
-}
-
-function forward(nn, input) {
-  const hidden = nn.w1.map((row, i) =>
-    relu(dot(row, input) + nn.b1[i])
-  );
-
-  return nn.w2.map((row, i) =>
-    sigmoid(dot(row, hidden) + nn.b2[i])
-  );
-}
-
-function dot(a, b) {
-  return a.reduce((sum, val, i) => sum + val * b[i], 0);
-}
-
-function relu(x) {
-  return Math.max(0, x);
-}
-
-function sigmoid(x) {
-  return 1 / (1 + Math.exp(-x));
 }
