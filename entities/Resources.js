@@ -28,10 +28,12 @@ function spawnResource(type, x, y) {
 function spawnRandomResources(count = 5) {
   const typeKeys = Object.keys(TYPES);
   const maxRadius = Math.max(...Object.values(TYPES).map(t => t.radius));
+  const MARGIN = maxRadius + 20; // Increased buffer to keep resources away from map edges
+
   for (let i = 0; i < count && resources.length < MAX_RESOURCES; i++) {
     const randType = typeKeys[Math.floor(Math.random() * typeKeys.length)];
-    const x = maxRadius + Math.random() * (canvas.width - 2 * maxRadius);
-    const y = maxRadius + Math.random() * (canvas.height - 2 * maxRadius);
+    const x = MARGIN + Math.random() * (canvas.width - 2 * MARGIN);
+    const y = MARGIN + Math.random() * (canvas.height - 2 * MARGIN);
     spawnResource(randType, x, y);
   }
 }

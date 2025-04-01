@@ -1,12 +1,8 @@
-// NPCBird.js
 import { settings } from "../core/settings.js";
 import { canvas } from "../core/input.js";
 import { drawFlyingBird, drawLandedBird } from "../draw/drawBird.js";
 import { getNearestResource } from "../entities/Resources.js";
 import { forward, createHardCodedNN } from "../agents/brains.js";
-import { updateBirdPhysics } from "./birdPhysics.js";
-import { checkAndSpawn } from "./spawnLogic.js";
-
 
 function cloneBrain(brain) {
   return JSON.parse(JSON.stringify(brain));
@@ -93,6 +89,12 @@ export class NPCBird {
   }
 
   update(spawnBirdCallback) {
+    const margin = 10;
+    const spriteHalfHeight = this.bodyHeight + 5;
+    const flapCooldownFrames = settings.flapCooldown ?? 20;
+    const maxSpeed = settings.maxSpeed ?? 2.5;
+    const glideAffect = settings.glide_affect ?? 0.5;
+
     this.energy -= settings.resourceDrainRate || 0.1;
     if (this.energy <= 0) {
       this.dead = true;
@@ -108,10 +110,80 @@ export class NPCBird {
       return;
     }
 
-    const decision = this.think();
+    const { actionIndex, dirX, dirY } = this.think();
 
-    updateBirdPhysics(this, decision);
-    checkAndSpawn(this, spawnBirdCallback);
+    if (this.flapCooldown > 0) this.flapCooldown--;
+
+    if (this.energy >= 100) {
+      this.energy = 50;
+      const childBrain = mutate(cloneBrain(this.brain));
+      if (spawnBirdCallback) {
+        spawnBirdCallback(this.x + (Math.random() - 0.5) * 30, this.y + (Math.random() - 0.5) * 30, childBrain);
+      }
+    }
+
+    if (actionIndex !== 3) {
+      if (this.state === "LANDED") {
+        this.altitude = 0.5;
+        if (actionIndex === 0) {
+          this.vx = dirX * settings.followSpeed;
+          this.vy = dirY * settings.followSpeed;
+        } else if (actionIndex === 1 && this.flapCooldown <= 0) {
+          this.altitude += settings.flapStrengthGround;
+          this.altitude = Math.min(this.altitude, 2.5);
+          this.state = "FLYING";
+          this.flapAnim = 1.0;
+          this.flapCooldown = flapCooldownFrames;
+        }
+      } else if (this.state === "FLYING") {
+        if (actionIndex === 1 && this.flapCooldown <= 0) {
+          this.altitude += settings.flapStrengthAir;
+          this.altitude = Math.min(this.altitude, 2.5);
+          this.flapAnim = 1.0;
+          this.flapCooldown = flapCooldownFrames;
+        } else {
+          this.altitude -= settings.gravity;
+        }
+
+        if (actionIndex === 2) {
+          this.vx += dirX * settings.followSpeed * glideAffect;
+          this.vy += dirY * settings.followSpeed * glideAffect;
+        } else if (actionIndex === 1) {
+          this.vx += dirX * settings.followSpeed;
+          this.vy += dirY * settings.followSpeed;
+        }
+
+        if (this.altitude <= 0.5) {
+          this.altitude = 0.5;
+          this.state = "LANDED";
+        }
+      }
+    }
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    const speed = Math.hypot(this.vx, this.vy);
+    if (speed > maxSpeed) {
+      const scale = maxSpeed / speed;
+      this.vx *= scale;
+      this.vy *= scale;
+    }
+
+    this.x = Math.max(margin, Math.min(this.x, canvas.width - margin));
+    this.y = Math.max(margin + spriteHalfHeight, Math.min(this.y, canvas.height - margin - spriteHalfHeight));
+
+    this.altitude = Math.max(0.5, Math.min(this.altitude, 2.5));
+    this.vx *= 0.90;
+    this.vy *= 0.90;
+    this.flapAnim *= 0.9;
+
+    // Determine sprite mode
+    if (this.state === "FLYING") {
+      this.spriteMode = (actionIndex === 2) ? "GLIDE" : (actionIndex === 1) ? "FLAP" : "FLY";
+    } else {
+      this.spriteMode = "FLY";
+    }
   }
 
   draw(ctx) {

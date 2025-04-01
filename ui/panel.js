@@ -13,14 +13,15 @@ export function createDebugPanel() {
   document.body.appendChild(debugPanel);
 
   const sliders = [
-    { name: "resourceDrainRate", min: 0, max: 5, step: 0.1 },
     { name: "gravity", min: 0.01, max: 0.1, step: 0.001 },
     { name: "glide_grav", min: 0.5, max: 1, step: 0.01 },
     { name: "glide_affect", min: 1, max: 2, step: 0.01 },
     { name: "followSpeed", min: 1, max: 3, step: 0.1 },
     { name: "flapStrengthAir", min: 0.5, max: 1.5, step: 0.01 },
     { name: "flapStrengthGround", min: 0.5, max: 1.5, step: 0.01 },
+    { name: "resourceDrainRate", min: 0.01, max: 0.1, step: 0.005 },
     { name: "resourceSpawnRate", min: 0, max: 10, step: 1 },
+    { name: "maxBirds", min: 5, max: 50, step: 1 },
   ];
 
   sliders.forEach(({ name, min, max, step }) => {
@@ -51,7 +52,7 @@ export function createDebugPanel() {
     debugPanel.appendChild(wrapper);
   });
 
-  // Toggle: birdSpawnRate (0 or 1)
+  // Toggle: birdSpawnRate
   const toggleWrapper = document.createElement("div");
   const toggleLabel = document.createElement("label");
   toggleLabel.textContent = "birdSpawn: ";
@@ -68,7 +69,7 @@ export function createDebugPanel() {
   toggleWrapper.appendChild(toggleInput);
   debugPanel.appendChild(toggleWrapper);
 
-  // Toggle: debugBird (on/off)
+  // Toggle: debugBird
   const debugWrapper = document.createElement("div");
   const debugLabel = document.createElement("label");
   debugLabel.textContent = "debugBird: ";
