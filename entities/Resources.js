@@ -1,6 +1,7 @@
 // entities/resources.js
 
 import { ctx, canvas } from "../core/input.js";
+import { settings } from "../core/settings.js";
 
 const TYPES = {
   BERRY: { color: 'red', radius: 5, energy: 10 },
@@ -9,8 +10,10 @@ const TYPES = {
 };
 
 const resources = [];
+const MAX_RESOURCES = 100;
 
 function spawnResource(type, x, y) {
+  if (resources.length >= MAX_RESOURCES) return;
   const t = TYPES[type];
   resources.push({
     type,
@@ -24,23 +27,29 @@ function spawnResource(type, x, y) {
 
 function spawnRandomResources(count = 5) {
   const typeKeys = Object.keys(TYPES);
-  for (let i = 0; i < count; i++) {
+  const maxRadius = Math.max(...Object.values(TYPES).map(t => t.radius));
+  for (let i = 0; i < count && resources.length < MAX_RESOURCES; i++) {
     const randType = typeKeys[Math.floor(Math.random() * typeKeys.length)];
-    const x = Math.random() * canvas.width;
-    const y = Math.random() * canvas.height;
+    const x = maxRadius + Math.random() * (canvas.width - 2 * maxRadius);
+    const y = maxRadius + Math.random() * (canvas.height - 2 * maxRadius);
     spawnResource(randType, x, y);
   }
 }
 
-// ⏱️ Timed spawning
+// ⏱️ Dynamic spawning interval based on settings
 let lastSpawnTime = 0;
-const spawnInterval = 3000; // ms
+const baseInterval = 1000; // ms per unit rate (e.g. 1000ms / 5 = 200ms interval)
 
 function updateResources(entity) {
   const now = performance.now();
-  if (now - lastSpawnTime > spawnInterval) {
-    spawnRandomResources(1);
-    lastSpawnTime = now;
+  const rate = settings.resourceSpawnRate ?? 1;
+
+  if (rate > 0) {
+    const spawnInterval = baseInterval / rate;
+    if (now - lastSpawnTime > spawnInterval && resources.length < MAX_RESOURCES) {
+      spawnRandomResources(1);
+      lastSpawnTime = now;
+    }
   }
 
   for (let i = resources.length - 1; i >= 0; i--) {
@@ -49,7 +58,11 @@ function updateResources(entity) {
     const dy = entity.y - r.y;
     const dist = Math.hypot(dx, dy);
     if (dist < r.radius + entity.radius) {
-      entity.energy = (entity.energy || 0) + r.energy;
+      if (typeof entity.feed === 'function') {
+        entity.feed(r.energy);
+      } else {
+        entity.energy = (entity.energy || 0) + r.energy;
+      }
       resources.splice(i, 1);
     }
   }

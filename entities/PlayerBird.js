@@ -49,8 +49,21 @@ export class PlayerBird {
 
     const overMouse = Math.abs(mouse.x - this.x) < 10 && Math.abs(mouse.y - this.y) < 10;
     this.diving = this.state === "FLYING" && overMouse;
-    this.spriteMode = this.diving ? "DIVE" : "FLY";
-
+    
+    if (this.state === "FLYING") {
+      if (this.diving) {
+        this.spriteMode = "DIVE";
+      } else if (mouse.isDown && this.mouseDownTime >= 10) {
+        this.spriteMode = "GLIDE";
+      } else if (this.mouseDownTime > 0 && this.mouseDownTime <= 15) {
+        this.spriteMode = "FLAP";
+      } else {
+        this.spriteMode = "FLY";
+      }
+    } else {
+      this.spriteMode = "FLY";
+    }
+    
     if (this.state === "LANDED") {
       this.altitude = 0.5;
       if (mouse.isDown && this.mouseDownTime >= 10) {

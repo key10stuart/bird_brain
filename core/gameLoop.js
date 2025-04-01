@@ -9,6 +9,7 @@ import {
   drawResources,
   getNearestResource
 } from "../entities/Resources.js";
+import { settings } from "./settings.js";
 
 const player = new PlayerBird();
 const npcBirds = [
@@ -16,6 +17,13 @@ const npcBirds = [
   new NPCBird(300, 200),
   new NPCBird(500, 250)
 ];
+
+function spawnBirdCallback(x, y, brain) {
+  const newBird = new NPCBird(x, y, brain);
+  npcBirds.push(newBird);
+}
+
+let lastBirdSpawnTime = 0;
 
 export function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -34,15 +42,34 @@ export function gameLoop() {
   updateResources(player);
   drawResources();
 
-  for (const npc of npcBirds) {
+  for (let i = npcBirds.length - 1; i >= 0; i--) {
+    const npc = npcBirds[i];
     updateResources(npc);
-    const target = getNearestResource(npc.x, npc.y);
-    npc.update(target);
-    npc.draw(ctx);
+    npc.update(spawnBirdCallback);
+    if (npc.dead) {
+      npcBirds.splice(i, 1);
+    } else {
+      npc.draw(ctx);
+    }
+  }
+
+  // 🐣 Bird spawner logic
+  const now = performance.now();
+  if (settings.birdSpawnRate === 1 && now - lastBirdSpawnTime > 1000) {
+    const x = Math.random() * canvas.width;
+    const y = Math.random() * canvas.height;
+    npcBirds.push(new NPCBird(x, y));
+    lastBirdSpawnTime = now;
   }
 
   player.update();
   player.draw(ctx);
+
+  // 📊 Live bird count (top right)
+  ctx.font = "16px monospace";
+  ctx.fillStyle = "white";
+  ctx.textAlign = "right";
+  ctx.fillText(`Birds: ${npcBirds.length}`, canvas.width - 10, 50);
 
   requestAnimationFrame(gameLoop);
 }

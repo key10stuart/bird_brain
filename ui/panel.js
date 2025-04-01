@@ -1,4 +1,3 @@
-// ui/debugPanel.js
 import { settings } from "../core/settings.js";
 
 export function createDebugPanel() {
@@ -14,15 +13,19 @@ export function createDebugPanel() {
   document.body.appendChild(debugPanel);
 
   const sliders = [
+    { name: "resourceDrainRate", min: 0, max: 5, step: 0.1 },
     { name: "gravity", min: 0.01, max: 0.1, step: 0.001 },
     { name: "glide_grav", min: 0.5, max: 1, step: 0.01 },
     { name: "glide_affect", min: 1, max: 2, step: 0.01 },
     { name: "followSpeed", min: 1, max: 3, step: 0.1 },
     { name: "flapStrengthAir", min: 0.5, max: 1.5, step: 0.01 },
     { name: "flapStrengthGround", min: 0.5, max: 1.5, step: 0.01 },
+    { name: "resourceSpawnRate", min: 0, max: 10, step: 1 },
   ];
 
   sliders.forEach(({ name, min, max, step }) => {
+    if (settings[name] === undefined) settings[name] = min === 0 ? 1 : min;
+
     const label = document.createElement("label");
     label.textContent = `${name}: `;
 
@@ -47,4 +50,38 @@ export function createDebugPanel() {
     wrapper.appendChild(valueDisplay);
     debugPanel.appendChild(wrapper);
   });
+
+  // Toggle: birdSpawnRate (0 or 1)
+  const toggleWrapper = document.createElement("div");
+  const toggleLabel = document.createElement("label");
+  toggleLabel.textContent = "birdSpawn: ";
+
+  const toggleInput = document.createElement("input");
+  toggleInput.type = "checkbox";
+  if (settings.birdSpawnRate === undefined) settings.birdSpawnRate = 0;
+  toggleInput.checked = settings.birdSpawnRate === 1;
+  toggleInput.onchange = () => {
+    settings.birdSpawnRate = toggleInput.checked ? 1 : 0;
+  };
+
+  toggleWrapper.appendChild(toggleLabel);
+  toggleWrapper.appendChild(toggleInput);
+  debugPanel.appendChild(toggleWrapper);
+
+  // Toggle: debugBird (on/off)
+  const debugWrapper = document.createElement("div");
+  const debugLabel = document.createElement("label");
+  debugLabel.textContent = "debugBird: ";
+
+  const debugInput = document.createElement("input");
+  debugInput.type = "checkbox";
+  if (settings.debugBird === undefined) settings.debugBird = false;
+  debugInput.checked = settings.debugBird;
+  debugInput.onchange = () => {
+    settings.debugBird = debugInput.checked;
+  };
+
+  debugWrapper.appendChild(debugLabel);
+  debugWrapper.appendChild(debugInput);
+  debugPanel.appendChild(debugWrapper);
 }
