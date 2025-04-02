@@ -2,7 +2,9 @@
 import { mouse } from "../core/input.js";
 
 export function drawFlyingBird(ctx, bird) {
-  ctx.scale(bird.altitude, bird.altitude);
+  // Alias altitude range [0, 2] as [1, 3] for visual scaling
+  const visualScale = 0.5 + bird.altitude;
+  ctx.scale(visualScale, visualScale);
   ctx.beginPath();
   ctx.ellipse(0, 0, 10, 6, 0, 0, Math.PI * 2);
   ctx.fillStyle = "cyan";

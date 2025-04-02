@@ -4,9 +4,8 @@ import { canvas } from "../core/input.js";
 import { drawFlyingBird, drawLandedBird } from "../draw/drawBird.js";
 import { getNearestResource } from "../entities/Resources.js";
 import { forward, createHardCodedNN } from "../agents/brains.js";
-import { updateBirdPhysics } from "./birdPhysics.js";
+import { updateBirdPhysics } from "../core/birdPhysics.js";
 import { checkAndSpawn } from "./spawnLogic.js";
-
 
 function cloneBrain(brain) {
   return JSON.parse(JSON.stringify(brain));
@@ -46,6 +45,7 @@ export class NPCBird {
     this.angle = 0;
     this.flapCooldown = 0;
     this.feedCooldownFrames = 0;
+    this.collisionCooldown = 0; // new field
   }
 
   feed(amount = 20) {
@@ -92,7 +92,7 @@ export class NPCBird {
     };
   }
 
-  update(spawnBirdCallback) {
+  update(spawnBirdCallback, allBirds = []) {
     this.energy -= settings.resourceDrainRate || 0.1;
     if (this.energy <= 0) {
       this.dead = true;
@@ -109,8 +109,7 @@ export class NPCBird {
     }
 
     const decision = this.think();
-
-    updateBirdPhysics(this, decision);
+    updateBirdPhysics(this, decision, allBirds);
     checkAndSpawn(this, spawnBirdCallback);
   }
 
