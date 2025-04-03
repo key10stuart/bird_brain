@@ -1,31 +1,22 @@
-// NPCBird.js
 import { settings } from "../core/settings.js";
 import { canvas } from "../core/input.js";
-import { drawFlyingBird, drawLandedBird } from "../draw/drawBird.js";
 import { getNearestResource } from "../entities/Resources.js";
-import { forward, createHardCodedNN } from "../agents/brains.js";
+import { forwardAttentionNet } from "../agents/bird_brains/all_you_need.js";
+import { forwardMotorNet } from "../agents/bird_brains/motorCortex.js";
 import { updateBirdPhysics } from "../core/birdPhysics.js";
 import { checkAndSpawn } from "./spawnLogic.js";
+import { getScaledDelta } from "../core/timeControl.js";
+import { drawBird } from "../draw/drawBird.js";
 
-function cloneBrain(brain) {
-  return JSON.parse(JSON.stringify(brain));
-}
-
-function mutate(brain, rate = 0.1, magnitude = 0.5) {
-  for (const layer of ['w1', 'w2']) {
-    brain[layer] = brain[layer].map(row =>
-      row.map(w => (Math.random() < rate ? w + (Math.random() * 2 - 1) * magnitude : w))
-    );
-  }
-  return brain;
-}
+const BirdStates = { FLYING: "FLYING", LANDED: "LANDED" };
+const BirdActions = { WALK: 0, FLAP: 1, GLIDE: 2, IDLE: 3 };
 
 function argMax(arr) {
   return arr.reduce((maxIdx, val, idx, a) => (val > a[maxIdx] ? idx : maxIdx), 0);
 }
 
 export class NPCBird {
-  constructor(x, y, brain = null, energy = 50) {
+  constructor(x, y, motorNet = null, energy = 50) {
     this.x = x;
     this.y = y;
     this.vx = 0;
@@ -34,114 +25,131 @@ export class NPCBird {
     this.altitude = 0.5;
     this.flapAnim = 0;
     this.spriteMode = "FLY";
-    this.state = "LANDED";
+    this.state = BirdStates.LANDED;
 
     this.radius = 10;
     this.bodyHeight = 7;
 
     this.energy = energy;
-    this.brain = brain || createHardCodedNN();
-
+    this.brain = motorNet;
     this.angle = 0;
     this.flapCooldown = 0;
     this.feedCooldownFrames = 0;
-    this.collisionCooldown = 0; // new field
+    this.collisionCooldown = 0;
+
+    this.attentionTarget = null;
+    this.destination = null;
+
+    this.attentionTimer = 0;
+    this.destinationTimer = 0;
+    this.motorDecision = null;
   }
 
   feed(amount = 20) {
     if (this.feedCooldownFrames > 0) return;
-    this.energy = Math.min(100, this.energy + amount);
+    this.energy += amount;
     this.feedCooldownFrames = 5 * (settings.fps ?? 60);
   }
 
-  think() {
-    const w = canvas?.width ?? 800;
-    const h = canvas?.height ?? 600;
-
-    const resource = getNearestResource(this.x, this.y);
-    const dx = resource ? (resource.x - this.x) : 0;
-    const dy = resource ? (resource.y - this.y) : 0;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const safeDist = Math.max(dist, 1e-3);
-
-    if (dist > 1) {
-      const targetAngle = Math.atan2(dy, dx);
-      const angleDiff = targetAngle - this.angle;
-      const normalized = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
-      this.angle += normalized * 0.2;
-    }
-
-    const input = [
-      dx / w,
-      dy / h,
-      this.vx,
-      this.vy,
-      this.altitude / 2.5,
-      this.energy / 100,
-      dist,
-      1,
-    ];
-
-    const output = forward(this.brain, input);
-    const actionIndex = argMax(output);
-
-    return {
-      actionIndex,
-      dirX: dx / safeDist,
-      dirY: dy / safeDist,
-    };
-  }
-
   update(spawnBirdCallback, allBirds = []) {
-    this.energy -= settings.resourceDrainRate || 0.1;
+    const delta = getScaledDelta();
+
+    this.energy -= (settings.resourceDrainRate || 0.1) * (settings.simSpeed || 1);
     if (this.energy <= 0) {
       this.dead = true;
       return;
     }
 
     if (this.feedCooldownFrames > 0) {
-      this.feedCooldownFrames--;
-      this.state = "LANDED";
+      this.feedCooldownFrames -= (delta / 16);
+      this.state = BirdStates.LANDED;
       this.altitude = 0.5;
       this.vx = 0;
       this.vy = 0;
       return;
     }
 
-    const decision = this.think();
-    updateBirdPhysics(this, decision, allBirds);
-    checkAndSpawn(this, spawnBirdCallback);
+    this.attentionTimer += delta;
+    this.destinationTimer += delta;
+
+    const w = canvas?.width ?? 800;
+    const h = canvas?.height ?? 600;
+
+    const resource = getNearestResource(this.x, this.y);
+    const dx = resource ? (resource.x - this.x) : 0;
+    const dy = resource ? (resource.y - this.y) : 0;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    if (this.attentionTimer > 5000) {
+      const input = [
+        dx / w,
+        dy / h,
+        dist,
+        this.energy / 100,
+        resource?.type === "bug" ? 2 : resource?.type === "seed" ? 1 : 0,
+      ];
+      const attendProb = forwardAttentionNet(this.attentionSetter, input);
+      this.attentionTarget = attendProb > 0.2 ? resource : null;
+      this.attentionTimer = 0;
+    }
+
+    if (this.destinationTimer > 1000) {
+      const attn = this.attentionTarget;
+      const attnDx = attn ? attn.x - this.x : 0;
+      const attnDy = attn ? attn.y - this.y : 0;
+
+      const newDest = { x: this.x + dx, y: this.y + dy };
+      const oldDest = this.destination;
+      const distToOld = oldDest ? Math.hypot(oldDest.x - newDest.x, oldDest.y - newDest.y) : Infinity;
+
+      const input = [
+        this.x / w,
+        this.y / h,
+        this.vx,
+        this.vy,
+        this.state === BirdStates.FLYING ? 1 : 0,
+        attnDx / w,
+        attnDy / h,
+        dx / w,
+        dy / h,
+        this.energy / 100,
+        1
+      ];
+      this.motorDecision = forwardMotorNet(this.brain, input);
+      if (distToOld > 20) {
+        this.destination = newDest;
+      }
+      this.destinationTimer = 0;
+    }
+
+    const faceTarget = this.destination ?? this.attentionTarget;
+    if (faceTarget) {
+      const fx = faceTarget.x - this.x;
+      const fy = faceTarget.y - this.y;
+      const angleToTarget = Math.atan2(fy, fx);
+      const deltaAngle = angleToTarget - this.angle;
+      this.angle += Math.atan2(Math.sin(deltaAngle), Math.cos(deltaAngle)) * 0.1;
+    }
+
+    if (!this.motorDecision) return;
+
+    const actionIndex = argMax(this.motorDecision.slice(0, 3));
+    const glideDuration = this.motorDecision[3] * 3.0;
+
+    updateBirdPhysics(this, {
+      actionIndex,
+      dirX: dx / dist,
+      dirY: dy / dist,
+      glideDuration
+    }, allBirds, this.destination?.x, this.destination?.y);
+
+    checkAndSpawn(this, (newBird) => {
+      console.log(`🐣 Bird reproduced at (${this.x.toFixed(1)}, ${this.y.toFixed(1)})`);
+      spawnBirdCallback(newBird);
+    });
   }
 
   draw(ctx) {
-    ctx.save();
-    ctx.translate(this.x, this.y);
-
-    if (settings.debugBird) {
-      const resource = getNearestResource(this.x, this.y);
-      if (resource && Number.isFinite(resource.x) && Number.isFinite(resource.y)) {
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(resource.x - this.x, resource.y - this.y);
-        ctx.strokeStyle = "rgba(255, 0, 0, 0.5)";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        if (!this._debugTick) this._debugTick = 0;
-        if (++this._debugTick % 60 === 0) {
-          console.log(`[DEBUG] NPCBird @ (${this.x.toFixed(1)}, ${this.y.toFixed(1)}) → Resource @ (${resource.x.toFixed(1)}, ${resource.y.toFixed(1)})`);
-        }
-      }
-    }
-
-    ctx.rotate(this.angle);
-
-    if (this.state === "LANDED") {
-      drawLandedBird(ctx);
-    } else {
-      drawFlyingBird(ctx, this);
-    }
-
-    ctx.restore();
+    drawBird(ctx, this);
   }
 }

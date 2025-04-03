@@ -1,13 +1,32 @@
 // draw/drawBird.js
-import { mouse } from "../core/input.js";
+
+import { isDevMode, getDevBird } from "../core/dev_env.js";
+
+// Main render entry point for birds
+export function drawBird(ctx, bird) {
+  ctx.save();
+
+  ctx.translate(bird.x, bird.y);
+  ctx.rotate(bird.angle);
+
+  if (bird.state === "LANDED") {
+    drawLandedBird(ctx, bird);
+  } else {
+    drawFlyingBird(ctx, bird);
+  }
+
+  ctx.restore();
+}
 
 export function drawFlyingBird(ctx, bird) {
-  // Alias altitude range [0, 2] as [1, 3] for visual scaling
-  const visualScale = 0.5 + bird.altitude;
+  const altitudeShift = isDevMode() && bird === getDevBird() ? 1 : 0;
+  const visualScale = 0.5 + bird.altitude + altitudeShift;
+
   ctx.scale(visualScale, visualScale);
+
   ctx.beginPath();
   ctx.ellipse(0, 0, 10, 6, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "cyan";
+  ctx.fillStyle = bird.color || "cyan";
   ctx.fill();
 
   if (bird.spriteMode === "DIVE") {
@@ -15,7 +34,7 @@ export function drawFlyingBird(ctx, bird) {
     drawWing(ctx, 0, 4, -10, 8);
   } else {
     const gliding = bird.spriteMode === "GLIDE";
-    const easedFlap = Math.pow(bird.flapAnim, 0.5);
+    const easedFlap = Math.sin(bird.flapAnim * Math.PI); // smoother lift cycle
     const fold = gliding ? 0 : 40 * easedFlap;
     drawWing(ctx, 0, -10, -20 + fold, -18);
     drawWing(ctx, 0, 10, -20 + fold, 18);
@@ -24,20 +43,27 @@ export function drawFlyingBird(ctx, bird) {
   drawEyesAndBeak(ctx);
 }
 
-export function drawLandedBird(ctx) {
+export function drawLandedBird(ctx, bird) {
+  const altitudeShift = isDevMode() && bird === getDevBird() ? 1 : 0;
+  const visualScale = 0.75 + altitudeShift;
+
   ctx.save();
-  ctx.scale(0.75, 0.45); // Slightly wider and fatter body
+  ctx.scale(visualScale, visualScale);
+
+  // Body (vertically squashed)
+  ctx.save();
+  ctx.scale(1, 0.6);
   ctx.beginPath();
   ctx.ellipse(0, 0, 10, 10, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "cyan";
+  ctx.fillStyle = bird.color || "cyan";
   ctx.fill();
   ctx.restore();
 
-  // Slightly larger, folded wings
   drawWing(ctx, -4, -3, -8, -4);
   drawWing(ctx, -4, 3, -8, 4);
-
   drawEyesAndBeak(ctx, true);
+
+  ctx.restore();
 }
 
 function drawWing(ctx, baseX, baseY, tipX, tipY) {
@@ -52,18 +78,17 @@ function drawWing(ctx, baseX, baseY, tipX, tipY) {
 }
 
 function drawEyesAndBeak(ctx, isLanded = false) {
-  // Eyes
   const eyeSize = isLanded ? 1.8 : 2;
-  const eyeX = isLanded ? 3 : 6; // Nudged further back
+  const eyeX = isLanded ? 3 : 6;
+
   ctx.beginPath();
   ctx.ellipse(eyeX, -2, eyeSize, 1, 0, 0, Math.PI * 2);
   ctx.ellipse(eyeX, 2, eyeSize, 1, 0, 0, Math.PI * 2);
   ctx.fillStyle = "black";
   ctx.fill();
 
-  // Beak
   const beakLength = isLanded ? 4 : 6;
-  const beakBaseX = isLanded ? 5 : 10; // A little further back
+  const beakBaseX = isLanded ? 5 : 10;
   const beakWidth = 4;
 
   ctx.beginPath();

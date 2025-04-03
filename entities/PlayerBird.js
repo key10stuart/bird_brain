@@ -1,7 +1,7 @@
 // entities/PlayerBird.js
+
 import { canvas, mouse } from "../core/input.js";
 import { settings } from "../core/settings.js";
-import { drawFlyingBird, drawLandedBird } from "../draw/drawBird.js";
 import { updateBirdPhysics } from "../core/birdPhysics.js";
 import { BaseBird } from "./BaseBird.js";
 
@@ -10,8 +10,8 @@ export class PlayerBird {
     this.birdBody = new BaseBird(canvas.width / 2, canvas.height / 2);
     this.mouseDownTime = 0;
     this.wasMouseDown = false;
-    this._actionIndex = 3; // default to IDLE
-    this.birdBody.collisionCooldown = 0; // support collision cooldown
+    this._actionIndex = 3; // IDLE by default
+    this.birdBody.collisionCooldown = 0;
   }
 
   update(allBirds = []) {
@@ -38,7 +38,8 @@ export class PlayerBird {
 
     this.wasMouseDown = mouse.isDown;
 
-    if (dist > settings.angleDeadzone) {
+    const angleDeadzone = settings.angleDeadzone ?? 8;
+    if (dist > angleDeadzone) {
       this.birdBody.angle = Math.atan2(dy, dx);
     }
 
@@ -49,17 +50,31 @@ export class PlayerBird {
     }, allBirds, mouse.x, mouse.y);
   }
 
-  draw(ctx) {
-    ctx.save();
-    ctx.translate(this.birdBody.x, this.birdBody.y);
-    ctx.rotate(this.birdBody.angle);
+  // ==== Getter/setter passthroughs to make PlayerBird duck-compatible ====
 
-    if (this.birdBody.state === "FLYING") {
-      drawFlyingBird(ctx, this.birdBody);
-    } else {
-      drawLandedBird(ctx);
-    }
+  get x() { return this.birdBody.x; }
+  set x(value) { this.birdBody.x = value; }
 
-    ctx.restore();
+  get y() { return this.birdBody.y; }
+  set y(value) { this.birdBody.y = value; }
+
+  get angle() { return this.birdBody.angle; }
+  set angle(value) { this.birdBody.angle = value; }
+
+  get altitude() { return this.birdBody.altitude; }
+  set altitude(value) { this.birdBody.altitude = value; }
+
+  get state() { return this.birdBody.state; }
+  set state(value) { this.birdBody.state = value; }
+
+  get spriteMode() { return this.birdBody.spriteMode; }
+  set spriteMode(value) { this.birdBody.spriteMode = value; }
+
+  get flapAnim() { return this.birdBody.flapAnim; }
+  set flapAnim(value) { this.birdBody.flapAnim = value; }
+
+  // Optional: For rendering, access birdBody directly
+  get drawable() {
+    return this.birdBody;
   }
 }

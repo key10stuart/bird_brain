@@ -1,75 +1,69 @@
 // core/gameLoop.js
 
 import { canvas, ctx } from "./input.js";
+import { updateSimPanel } from "../ui/sim_stuff.js";
 import { PlayerBird } from "../entities/PlayerBird.js";
-import { NPCBird } from "../entities/NPCbird.js";
-import { drawMap } from "../draw/drawMap.js";
-import {
-  updateResources,
-  drawResources,
-  getNearestResource
-} from "../entities/Resources.js";
 import { settings } from "./settings.js";
 
-const player = new PlayerBird();
-const npcBirds = [
-  new NPCBird(100, 150),
-  new NPCBird(300, 200),
-  new NPCBird(500, 250)
-];
+import { createDefaultGenome } from "../evolution/genetics.js";
+import { buildBirdFromGenome } from "../entities/birdBuilder.js";
+import { passiveBirdSpawner } from "../entities/spawnLogic.js";
+import { updateResources } from "../entities/Resources.js";
+import { updateTime, getScaledDelta, getDelta } from "./timeControl.js";
 
-function spawnBirdCallback(x, y, brain) {
-  const newBird = new NPCBird(x, y, brain);
+import { renderScene } from "../draw/renderScene.js";
+import { isDevMode, renderDevScene, getDevBird, onDevExit } from "./dev_env.js"; // <-- new
+
+let player;
+let npcBirds;
+
+function spawnBirdCallback(newBird) {
   npcBirds.push(newBird);
 }
 
-let lastBirdSpawnTime = 0;
+export function resetGameState() {
+  player = new PlayerBird();
+
+  npcBirds = [
+    buildBirdFromGenome(100, 150, createDefaultGenome()),
+    buildBirdFromGenome(300, 200, createDefaultGenome()),
+    buildBirdFromGenome(500, 250, createDefaultGenome()),
+  ];
+}
+
+// Initialize once at startup
+resetGameState();
 
 export function gameLoop() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  updateTime();
+  const delta = getDelta();
+  const scaledDelta = getScaledDelta();
 
-  // 🚨 Visual alert if any bird escapes
-  for (const npc of npcBirds) {
-    if (npc.y > canvas.height + 10) {
-      ctx.fillStyle = "rgba(255, 0, 0, 0.2)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      break;
+  // === Update Phase ===
+  if (!isDevMode()) {
+    updateResources(player, delta);
+    for (let i = npcBirds.length - 1; i >= 0; i--) {
+      updateResources(npcBirds[i], delta);
     }
-  }
 
-  drawMap();
-
-  updateResources(player);
-  drawResources();
-
-  for (let i = npcBirds.length - 1; i >= 0; i--) {
-    const npc = npcBirds[i];
-    updateResources(npc);
-    npc.update(spawnBirdCallback);
-    if (npc.dead) {
-      npcBirds.splice(i, 1);
-    } else {
-      npc.draw(ctx);
+    for (let i = npcBirds.length - 1; i >= 0; i--) {
+      const npc = npcBirds[i];
+      npc.update(spawnBirdCallback);
+      if (npc.dead) npcBirds.splice(i, 1);
     }
+
+    passiveBirdSpawner(npcBirds, settings, delta);
+    player.update();
+    updateSimPanel({ birdCount: npcBirds.length });
   }
 
-  // 🐣 Bird spawner logic
-  const now = performance.now();
-  if (settings.birdSpawnRate === 1 && now - lastBirdSpawnTime > 1000) {
-    const x = Math.random() * canvas.width;
-    const y = Math.random() * canvas.height;
-    npcBirds.push(new NPCBird(x, y));
-    lastBirdSpawnTime = now;
+  // === Render Phase ===
+  if (isDevMode()) {
+    const devBird = getDevBird();
+    renderDevScene(ctx, devBird);
+  } else {
+    renderScene(ctx, { player, npcBirds });
   }
-
-  player.update();
-  player.draw(ctx);
-
-  // 📊 Live bird count (top right)
-  ctx.font = "16px monospace";
-  ctx.fillStyle = "white";
-  ctx.textAlign = "right";
-  ctx.fillText(`Birds: ${npcBirds.length}`, canvas.width - 10, 50);
 
   requestAnimationFrame(gameLoop);
 }

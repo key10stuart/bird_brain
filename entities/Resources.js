@@ -1,12 +1,12 @@
-// entities/resources.js
+// entities/Resources.js
 
-import { ctx, canvas } from "../core/input.js";
+import { canvas } from "../core/input.js";
 import { settings } from "../core/settings.js";
 
 const TYPES = {
-  BERRY: { color: 'red', radius: 5, energy: 10 },
-  SEED:  { color: 'saddlebrown', radius: 4, energy: 5 },
-  BUG:   { color: 'black', radius: 6, energy: 15 }
+  BERRY: { color: 'red', radius: 5, energy: 30 },
+  SEED:  { color: 'saddlebrown', radius: 4, energy: 20 },
+  BUG:   { color: 'black', radius: 6, energy: 50 }
 };
 
 const resources = [];
@@ -28,7 +28,7 @@ function spawnResource(type, x, y) {
 function spawnRandomResources(count = 5) {
   const typeKeys = Object.keys(TYPES);
   const maxRadius = Math.max(...Object.values(TYPES).map(t => t.radius));
-  const MARGIN = maxRadius + 20; // Increased buffer to keep resources away from map edges
+  const MARGIN = maxRadius + 20;
 
   for (let i = 0; i < count && resources.length < MAX_RESOURCES; i++) {
     const randType = typeKeys[Math.floor(Math.random() * typeKeys.length)];
@@ -38,19 +38,19 @@ function spawnRandomResources(count = 5) {
   }
 }
 
-// ⏱️ Dynamic spawning interval based on settings
-let lastSpawnTime = 0;
-const baseInterval = 1000; // ms per unit rate (e.g. 1000ms / 5 = 200ms interval)
+let accumulatedSpawnTime = 0;
+const baseInterval = 1000;
 
-function updateResources(entity) {
-  const now = performance.now();
+function updateResources(entity, delta = 16) {
   const rate = settings.resourceSpawnRate ?? 1;
 
   if (rate > 0) {
     const spawnInterval = baseInterval / rate;
-    if (now - lastSpawnTime > spawnInterval && resources.length < MAX_RESOURCES) {
+    accumulatedSpawnTime += delta * (settings.simSpeed || 1);
+
+    while (accumulatedSpawnTime >= spawnInterval && resources.length < MAX_RESOURCES) {
       spawnRandomResources(1);
-      lastSpawnTime = now;
+      accumulatedSpawnTime -= spawnInterval;
     }
   }
 
@@ -59,6 +59,7 @@ function updateResources(entity) {
     const dx = entity.x - r.x;
     const dy = entity.y - r.y;
     const dist = Math.hypot(dx, dy);
+
     if (dist < r.radius + entity.radius) {
       if (typeof entity.feed === 'function') {
         entity.feed(r.energy);
@@ -67,15 +68,6 @@ function updateResources(entity) {
       }
       resources.splice(i, 1);
     }
-  }
-}
-
-function drawResources() {
-  for (const r of resources) {
-    ctx.beginPath();
-    ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-    ctx.fillStyle = r.color;
-    ctx.fill();
   }
 }
 
@@ -101,6 +93,5 @@ export {
   spawnResource,
   spawnRandomResources,
   updateResources,
-  drawResources,
   getNearestResource
 };

@@ -1,78 +1,93 @@
 // birdPhysics.js
 import { settings } from "./settings.js";
 import { canvas } from "./input.js";
+import { getScaledDelta } from "./timeControl.js";
 
 const ALTITUDE_MARGIN = 0.3;
 const COLLISION_RADIUS = 20;
 const BOUNCE_FORCE = 1.5;
 const COLLISION_COOLDOWN_FRAMES = 60;
-const DIVE_PROXIMITY = 20; // expanded dive trigger area
 
 export function updateBirdPhysics(bird, decision, allBirds = [], targetX = null, targetY = null) {
-  const { actionIndex, dirX, dirY } = decision;
+  const delta = getScaledDelta();
+  const deltaFactor = delta / 16;
+
+  const { actionIndex, dirX, dirY, glideDuration = 0 } = decision;
 
   const margin = 10;
   const spriteHalfHeight = bird.bodyHeight + 5;
   const flapCooldownFrames = settings.flapCooldown ?? 20;
   const maxSpeed = settings.maxSpeed ?? 2.5;
-  const glideAffect = settings.glide_affect ?? 0.5;
+  const glideAffect = bird.glide_affect ?? settings.glide_affect ?? 0.5;
 
-  if (bird.flapCooldown > 0) bird.flapCooldown--;
-  if (bird.collisionCooldown > 0) bird.collisionCooldown--;
+  if (bird.flapCooldown > 0) bird.flapCooldown -= deltaFactor;
+  if (bird.collisionCooldown > 0) bird.collisionCooldown -= deltaFactor;
 
   let diving = false;
 
-  if (bird.collisionCooldown === 0) {
+  const thrustX = Math.cos(bird.angle);
+  const thrustY = Math.sin(bird.angle);
+
+  const overMouse = targetX !== null && targetY !== null &&
+    Math.abs(targetX - bird.x) < 10 &&
+    Math.abs(targetY - bird.y) < 10;
+
+  if (bird.collisionCooldown <= 0) {
     if (bird.state === "LANDED") {
       bird.altitude = 0;
 
       if (actionIndex === 0) {
-        bird.vx = dirX * settings.followSpeed;
-        bird.vy = dirY * settings.followSpeed;
-      } else if (actionIndex === 1 && bird.flapCooldown <= 0) {
-        bird.altitude += settings.flapStrengthGround;
-        bird.altitude = Math.min(bird.altitude, 2.5);
-        bird.state = "FLYING";
-        bird.flapAnim = 1.0;
-        bird.flapCooldown = flapCooldownFrames;
+        bird.vx = thrustX * settings.followSpeed;
+        bird.vy = thrustY * settings.followSpeed;
+      } else if (actionIndex === 1) {
+        if (bird.flapCooldown <= 0) {
+          bird.altitude += settings.flapStrengthGround;
+          bird.altitude = Math.min(bird.altitude, 2.5);
+
+          const groundFlapThrust = settings.followSpeed * (settings.flapStrengthGround / 1.5);
+          bird.vx = thrustX * groundFlapThrust;
+          bird.vy = thrustY * groundFlapThrust;
+
+          bird.state = "FLYING";
+          bird.flapAnim = 1.0;
+          bird.flapCooldown = flapCooldownFrames;
+        }
       }
     }
 
     if (bird.state === "FLYING") {
-      const effectiveGravity = (actionIndex === 2)
-        ? settings.gravity * settings.glide_grav
-        : settings.gravity;
-      bird.altitude -= effectiveGravity;
-
-      if (actionIndex === 2) {
-        // Handle proximity dive trigger
+      if (overMouse) {
+        diving = true;
+        bird.altitude -= settings.gravity * 3.0;
+      } else if (actionIndex === 2) {
         if (targetX !== null && targetY !== null) {
           const dx = targetX - bird.x;
           const dy = targetY - bird.y;
-          const proximity = Math.hypot(dx, dy);
+          const dist = Math.hypot(dx, dy) || 1;
 
-          if (proximity < DIVE_PROXIMITY) {
-            diving = true;
-            bird.altitude -= settings.gravity * 2;
+          const desiredX = dx / dist;
+          const desiredY = dy / dist;
 
-            // Stop steering to prevent erratic shaking
-            bird.vx *= 0.9;
-            bird.vy *= 0.9;
-          } else {
-            bird.vx += dirX * settings.followSpeed * glideAffect;
-            bird.vy += dirY * settings.followSpeed * glideAffect;
-          }
+          const forwardGlideFactor = settings.followSpeed * glideAffect * deltaFactor;
+          const downwardGlideFactor = 0.1 * settings.gravity * deltaFactor;
+
+          bird.vx += desiredX * forwardGlideFactor;
+          bird.vy += desiredY * forwardGlideFactor;
+          bird.altitude -= downwardGlideFactor;
+        } else {
+          bird.altitude -= settings.gravity * settings.glide_grav * deltaFactor;
         }
-      } else if (actionIndex === 1) {
-        bird.vx += dirX * settings.followSpeed;
-        bird.vy += dirY * settings.followSpeed;
+      } else {
+        bird.altitude -= settings.gravity * deltaFactor;
+      }
 
-        if (bird.flapCooldown <= 0) {
-          bird.altitude += settings.flapStrengthAir;
-          bird.altitude = Math.min(bird.altitude, 2.5);
-          bird.flapAnim = 1.0;
-          bird.flapCooldown = flapCooldownFrames;
-        }
+      if (actionIndex === 1 && bird.flapCooldown <= 0) {
+        bird.vx += thrustX * settings.followSpeed;
+        bird.vy += thrustY * settings.followSpeed;
+        bird.altitude += settings.flapStrengthAir;
+        bird.altitude = Math.min(bird.altitude, 2.5);
+        bird.flapAnim = 1.0;
+        bird.flapCooldown = flapCooldownFrames;
       }
 
       if (bird.altitude <= 0) {
@@ -82,8 +97,8 @@ export function updateBirdPhysics(bird, decision, allBirds = [], targetX = null,
     }
   }
 
-  bird.x += bird.vx;
-  bird.y += bird.vy;
+  bird.x += bird.vx * deltaFactor;
+  bird.y += bird.vy * deltaFactor;
 
   const speed = Math.hypot(bird.vx, bird.vy);
   if (speed > maxSpeed) {

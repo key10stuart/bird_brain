@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "987173b03ea8e9a2",
+        "id": "3dfd2615f7f97865",
         "type": "tabs",
         "children": [
           {
-            "id": "84728e1fc44c709b",
+            "id": "59f4741e0458dc6a",
             "type": "leaf",
             "state": {
               "type": "empty",
@@ -90,6 +90,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "GPT_notes/GPT_notes_4.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -99,7 +100,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks"
+              "title": "Backlinks for GPT_notes_4"
             }
           },
           {
@@ -108,11 +109,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
+                "file": "GPT_notes/GPT_notes_4.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links"
+              "title": "Outgoing links from GPT_notes_4"
             }
           },
           {
@@ -136,12 +138,13 @@
             "state": {
               "type": "outline",
               "state": {
+                "file": "GPT_notes/GPT_notes_4.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline"
+              "title": "Outline of GPT_notes_4"
             }
           }
         ]
@@ -161,6 +164,12 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "84728e1fc44c709b",
-  "lastOpenFiles": []
+  "active": "0155e5e32a3c29ca",
+  "lastOpenFiles": [
+    "GPT_notes/GPT_notes_4.md",
+    "GPT_notes/chatGPT's notes.md",
+    "GPT_notes/GPT notes 2.md",
+    "GPT_notes/GPT_notes_3.md",
+    "GPT_notes"
+  ]
 }
